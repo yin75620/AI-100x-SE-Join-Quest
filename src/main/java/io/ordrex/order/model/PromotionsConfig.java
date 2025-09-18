@@ -13,10 +13,16 @@ public class PromotionsConfig {
 
     private final ThresholdPromotion thresholdPromotion; // nullable
     private final boolean cosmeticsBogoActive;
+    private final boolean double11Active;
 
     public PromotionsConfig(ThresholdPromotion thresholdPromotion, boolean cosmeticsBogoActive) {
+        this(thresholdPromotion, cosmeticsBogoActive, false);
+    }
+
+    public PromotionsConfig(ThresholdPromotion thresholdPromotion, boolean cosmeticsBogoActive, boolean double11Active) {
         this.thresholdPromotion = thresholdPromotion;
         this.cosmeticsBogoActive = cosmeticsBogoActive;
+        this.double11Active = double11Active;
     }
 
     public ThresholdPromotion getThresholdPromotion() {
@@ -26,5 +32,8 @@ public class PromotionsConfig {
     public boolean isCosmeticsBogoActive() {
         return cosmeticsBogoActive;
     }
-}
 
+    public boolean isDouble11Active() {
+        return double11Active;
+    }
+}

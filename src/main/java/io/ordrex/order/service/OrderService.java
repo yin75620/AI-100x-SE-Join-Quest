@@ -14,10 +14,21 @@ public class OrderService {
         }
 
         int discount = 0;
+        boolean double11 = promotions != null && promotions.isDouble11Active();
+        if (double11) {
+            for (OrderItem item : request.getItems()) {
+                int groups = item.getQuantity() / 10;
+                if (groups > 0) {
+                    // 20% off for each group of 10 of the same product
+                    int groupDiscount = groups * 10 * item.getUnitPrice() * 20 / 100;
+                    discount += groupDiscount;
+                }
+            }
+        }
         if (promotions != null && promotions.getThresholdPromotion() != null) {
             PromotionsConfig.ThresholdPromotion tp = promotions.getThresholdPromotion();
             if (original >= tp.threshold) {
-                discount = tp.discount;
+                discount += tp.discount;
             }
         }
 
