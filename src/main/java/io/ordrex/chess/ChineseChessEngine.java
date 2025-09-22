@@ -52,12 +52,21 @@ public class ChineseChessEngine {
         // simulate move
         board.removePiece(from);
         boolean capturedBlackGeneral = target != null && target.type == PieceType.GENERAL && target.color == Color.BLACK;
+        boolean capturedRedGeneral = target != null && target.type == PieceType.GENERAL && target.color == Color.RED;
         if (!board.isEmpty(to)) board.removePiece(to);
         board.placePiece(to, piece);
 
         // Generals facing rule (illegal if after move they face directly)
-        if (!capturedBlackGeneral && generalsFace()) {
+        if (!capturedBlackGeneral && !capturedRedGeneral && generalsFace()) {
             // revert (not strictly needed for these tests, but keeps board sane)
+            board.removePiece(to);
+            board.placePiece(from, piece);
+            if (target != null) board.placePiece(to, target);
+            return new MoveOutcome(false, false);
+        }
+
+        // Illegal if mover leaves own general in check
+        if (isInCheck(mover)) {
             board.removePiece(to);
             board.placePiece(from, piece);
             if (target != null) board.placePiece(to, target);
@@ -66,10 +75,17 @@ public class ChineseChessEngine {
 
         // Winning condition: capture Black General
         if (capturedBlackGeneral) {
-            return new MoveOutcome(true, true);
+            return new MoveOutcome(true, true, false, false, false);
         }
+        if (capturedRedGeneral) {
+            return new MoveOutcome(true, false, true, false, false);
+        }
+        // Check/checkmate on opponent after a legal move
+        Color opponent = (mover == Color.RED) ? Color.BLACK : Color.RED;
+        boolean oppInCheck = isInCheck(opponent);
+        boolean oppCheckmated = oppInCheck && !hasAnyLegalMove(opponent);
 
-        return new MoveOutcome(true, false);
+        return new MoveOutcome(true, false, false, oppInCheck, oppCheckmated);
     }
 
     private boolean validateGeneralMove(Color mover, Position from, Position to) {
@@ -218,5 +234,111 @@ public class ChineseChessEngine {
         }
         return true;
     }
-}
 
+    public boolean isInCheck(Color side) {
+        Position general = findGeneral(side);
+        if (general == null) return false; // no general found (shouldn't happen in normal play)
+        Color attacker = (side == Color.RED) ? Color.BLACK : Color.RED;
+        for (Map.Entry<Position, Piece> e : board.snapshot().entrySet()) {
+            Piece p = e.getValue();
+            if (p.color != attacker) continue;
+            Position from = e.getKey();
+            switch (p.type) {
+                case ROOK -> {
+                    if (from.row == general.row || from.col == general.col) {
+                        if (pathClear(from, general)) return true;
+                    }
+                }
+                case CANNON -> {
+                    if (from.row == general.row || from.col == general.col) {
+                        if (countBetween(from, general) == 1) return true;
+                    }
+                }
+                case HORSE -> {
+                    if (validateHorseMove(from, general)) return true;
+                }
+                case ELEPHANT -> {
+                    if (validateElephantMove(attacker, from, general)) return true;
+                }
+                case GUARD -> {
+                    if (validateGuardMove(attacker, from, general)) return true;
+                }
+                case SOLDIER -> {
+                    if (validateSoldierMove(attacker, from, general)) return true;
+                }
+                case GENERAL -> {
+                    if (validateGeneralMove(attacker, from, general)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public boolean hasAnyLegalMove(Color side) {
+        Map<Position, Piece> snap = board.snapshot();
+        for (Map.Entry<Position, Piece> e : snap.entrySet()) {
+            Piece p = e.getValue();
+            if (p.color != side) continue;
+            Position from = e.getKey();
+            for (int r = 1; r <= 10; r++) {
+                for (int c = 1; c <= 9; c++) {
+                    Position to = new Position(r, c);
+                    Piece target = board.getPiece(to);
+                    if (target != null && target.color == side) continue;
+                    if (wouldBeLegalMove(side, p.type, from, to)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean wouldBeLegalMove(Color mover, PieceType pieceType, Position from, Position to) {
+        Piece piece = board.getPiece(from);
+        if (piece == null || piece.color != mover || piece.type != pieceType) return false;
+        Piece target = board.getPiece(to);
+        if (target != null && target.color == mover) return false;
+
+        boolean legal = switch (pieceType) {
+            case GENERAL -> validateGeneralMove(mover, from, to);
+            case GUARD -> validateGuardMove(mover, from, to);
+            case ROOK -> validateRookMove(from, to);
+            case HORSE -> validateHorseMove(from, to);
+            case CANNON -> validateCannonMove(from, to, target != null);
+            case ELEPHANT -> validateElephantMove(mover, from, to);
+            case SOLDIER -> validateSoldierMove(mover, from, to);
+        };
+        if (!legal) return false;
+
+        // simulate and revert
+        board.removePiece(from);
+        Piece captured = null;
+        if (!board.isEmpty(to)) {
+            captured = board.getPiece(to);
+            board.removePiece(to);
+        }
+        board.placePiece(to, piece);
+
+        boolean ok = true;
+        // Generals facing is illegal
+        if (generalsFace()) ok = false;
+        // Self-check is illegal
+        if (ok && isInCheck(mover)) ok = false;
+
+        // revert
+        board.removePiece(to);
+        board.placePiece(from, piece);
+        if (captured != null) board.placePiece(to, captured);
+
+        return ok;
+    }
+
+    private Position findGeneral(Color side) {
+        for (Map.Entry<Position, Piece> e : board.snapshot().entrySet()) {
+            Piece p = e.getValue();
+            if (p.type == PieceType.GENERAL && p.color == side) return e.getKey();
+        }
+        return null;
+    }
+}
